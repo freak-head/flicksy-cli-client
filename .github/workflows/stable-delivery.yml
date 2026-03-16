@@ -456,7 +456,8 @@ jobs:
         working-directory: source
         run: |
           set -euo pipefail
-          rm -rf "$HOME/.npm"
+          rm -rf "$HOME/.npm/_cacache"
+          mkdir -p "$HOME/.npm"
           df -h
 
       - name: Prepare macOS runtime package
