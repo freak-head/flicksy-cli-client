@@ -1,0 +1,648 @@
+name: Stable Delivery
+
+on:
+  repository_dispatch:
+    types: [build-stable-release]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Stable release tag (for example v1.3.4)
+        required: true
+        type: string
+      version:
+        description: Optional version without v prefix
+        required: false
+        default: ""
+        type: string
+      title:
+        description: Optional release title
+        required: false
+        default: ""
+        type: string
+      notes:
+        description: Optional release notes
+        required: false
+        default: ""
+        type: string
+      source_ref:
+        description: Optional source git ref to clone
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+concurrency:
+  group: stable-delivery-${{ github.event.client_payload.tag || github.event.inputs.tag || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  resolve:
+    name: Resolve delivery inputs
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.resolve.outputs.tag }}
+      version: ${{ steps.resolve.outputs.version }}
+      title: ${{ steps.resolve.outputs.title }}
+      notes_b64: ${{ steps.resolve.outputs.notes_b64 }}
+      source_ref: ${{ steps.resolve.outputs.source_ref }}
+    steps:
+      - name: Resolve payload
+        id: resolve
+        env:
+          NOTES_RAW: ${{ github.event.client_payload.notes || github.event.inputs.notes || '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          tag="${{ github.event.client_payload.tag || github.event.inputs.tag || '' }}"
+          version="${{ github.event.client_payload.version || github.event.inputs.version || '' }}"
+          title="${{ github.event.client_payload.title || github.event.inputs.title || '' }}"
+          source_ref="${{ github.event.client_payload.source_ref || github.event.inputs.source_ref || '' }}"
+
+          if [ -z "$tag" ]; then
+            echo "tag is required"
+            exit 1
+          fi
+
+          if ! printf '%s' "$tag" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "tag must match vX.Y.Z"
+            exit 1
+          fi
+
+          if [ -z "$version" ]; then
+            version="${tag#v}"
+          fi
+
+          if [ -z "$title" ]; then
+            title="$tag"
+          fi
+
+          if [ -z "$source_ref" ]; then
+            source_ref="$tag"
+          fi
+
+          notes_file="$RUNNER_TEMP/release-notes.txt"
+          printf '%s' "$NOTES_RAW" > "$notes_file"
+
+          {
+            echo "tag=$tag"
+            echo "version=$version"
+            echo "title=$title"
+            echo "source_ref=$source_ref"
+            printf 'notes_b64=%s\n' "$(base64 -w0 "$notes_file")"
+          } >> "$GITHUB_OUTPUT"
+
+  build-linux:
+    name: Build Linux
+    needs: resolve
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ needs.resolve.outputs.tag }}
+      RELEASE_VERSION: ${{ needs.resolve.outputs.version }}
+      SOURCE_REF: ${{ needs.resolve.outputs.source_ref }}
+      DELIVERY_FETCH_URL: ${{ secrets.DELIVERY_FETCH_URL }}
+    steps:
+      - name: Validate clone secret
+        shell: bash
+        run: |
+          if [ -z "${DELIVERY_FETCH_URL:-}" ]; then
+            echo "DELIVERY_FETCH_URL is required."
+            exit 1
+          fi
+          echo "::add-mask::${DELIVERY_FETCH_URL}"
+
+      - name: Start SSH agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DELIVERY_FETCH_SSH_KEY }}
+
+      - name: Clone source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          ssh-keyscan github.com >> ~/.ssh/known_hosts
+          GIT_SSH_COMMAND='ssh -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes' \
+            git clone --quiet --depth 1 --branch "$SOURCE_REF" "$DELIVERY_FETCH_URL" source
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: source/package-lock.json
+
+      - name: Install dependencies
+        shell: bash
+        working-directory: source
+        run: npm ci
+
+      - name: Build fresh bundle
+        shell: bash
+        working-directory: source
+        run: |
+          set -euo pipefail
+          rm -rf dist
+          npm run build:bundle
+          test -f dist/bundle.mjs
+
+      - name: Prepare Linux runtime package
+        shell: bash
+        working-directory: source
+        run: |
+          set -euo pipefail
+          mkdir -p dist/linux-runtime
+          cp "$(command -v node)" dist/linux-runtime/node
+          chmod +x dist/linux-runtime/node
+          cp dist/bundle.mjs dist/linux-runtime/bundle.mjs
+          cat > dist/linux-runtime/flicksy << 'WRAP'
+          #!/bin/sh
+          SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+          exec env DEV=false "$SCRIPT_DIR/node" "$SCRIPT_DIR/bundle.mjs" "$@"
+          WRAP
+          chmod +x dist/linux-runtime/flicksy
+
+      - name: Install fpm
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ruby ruby-dev rubygems build-essential
+          sudo gem install fpm --no-document
+
+      - name: Build .deb
+        shell: bash
+        working-directory: source
+        run: |
+          set -euo pipefail
+          mkdir -p pkg-deb/usr/local/lib/flicksy pkg-deb/usr/local/bin
+          cp dist/linux-runtime/node pkg-deb/usr/local/lib/flicksy/node
+          cp dist/linux-runtime/bundle.mjs pkg-deb/usr/local/lib/flicksy/bundle.mjs
+          cat > pkg-deb/usr/local/bin/flicksy << 'WRAP'
+          #!/bin/sh
+          exec env DEV=false /usr/local/lib/flicksy/node /usr/local/lib/flicksy/bundle.mjs "$@"
+          WRAP
+          chmod +x pkg-deb/usr/local/bin/flicksy
+
+          fpm -s dir -t deb -n flicksy-cli -v "${RELEASE_VERSION}" \
+            --description "Flicksy CLI - stream your world" \
+            --url "https://github.com/${{ github.repository }}" \
+            --maintainer "reaperox" \
+            -C pkg-deb .
+          mv *.deb "dist/flicksy-cli_${RELEASE_VERSION}_amd64.deb"
+
+      - name: Build .rpm
+        shell: bash
+        working-directory: source
+        run: |
+          set -euo pipefail
+          mkdir -p pkg-rpm/usr/local/lib/flicksy pkg-rpm/usr/local/bin
+          cp dist/linux-runtime/node pkg-rpm/usr/local/lib/flicksy/node
+          cp dist/linux-runtime/bundle.mjs pkg-rpm/usr/local/lib/flicksy/bundle.mjs
+          cat > pkg-rpm/usr/local/bin/flicksy << 'WRAP'
+          #!/bin/sh
+          exec env DEV=false /usr/local/lib/flicksy/node /usr/local/lib/flicksy/bundle.mjs "$@"
+          WRAP
+          chmod +x pkg-rpm/usr/local/bin/flicksy
+
+          fpm -s dir -t rpm -n flicksy-cli -v "${RELEASE_VERSION}" \
+            --description "Flicksy CLI - stream your world" \
+            --url "https://github.com/${{ github.repository }}" \
+            --maintainer "reaperox" \
+            -C pkg-rpm .
+          mv *.rpm "dist/flicksy-cli-${RELEASE_VERSION}.x86_64.rpm"
+
+      - name: Build Linux tarball
+        shell: bash
+        working-directory: source
+        run: |
+          set -euo pipefail
+          mkdir -p dist/tar/flicksy-linux-x64
+          cp dist/linux-runtime/node dist/tar/flicksy-linux-x64/node
+          cp dist/linux-runtime/bundle.mjs dist/tar/flicksy-linux-x64/bundle.mjs
+          cp dist/linux-runtime/flicksy dist/tar/flicksy-linux-x64/flicksy
+          tar -C dist/tar -czf "dist/flicksy-cli-${RELEASE_VERSION}-linux-x64.tar.gz" flicksy-linux-x64
+
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@v5
+        with:
+          name: linux-${{ needs.resolve.outputs.tag }}
+          if-no-files-found: error
+          path: |
+            source/dist/*.deb
+            source/dist/*.rpm
+            source/dist/*linux-x64.tar.gz
+
+  build-windows:
+    name: Build Windows
+    needs: resolve
+    runs-on: windows-latest
+    env:
+      RELEASE_TAG: ${{ needs.resolve.outputs.tag }}
+      RELEASE_VERSION: ${{ needs.resolve.outputs.version }}
+      SOURCE_REF: ${{ needs.resolve.outputs.source_ref }}
+      DELIVERY_FETCH_URL: ${{ secrets.DELIVERY_FETCH_URL }}
+    steps:
+      - name: Validate clone secret
+        shell: bash
+        run: |
+          if [ -z "${DELIVERY_FETCH_URL:-}" ]; then
+            echo "DELIVERY_FETCH_URL is required."
+            exit 1
+          fi
+          echo "::add-mask::${DELIVERY_FETCH_URL}"
+
+      - name: Start SSH agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DELIVERY_FETCH_SSH_KEY }}
+
+      - name: Clone source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          ssh-keyscan github.com >> ~/.ssh/known_hosts
+          GIT_SSH_COMMAND='ssh -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes' \
+            git clone --quiet --depth 1 --branch "$SOURCE_REF" "$DELIVERY_FETCH_URL" source
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: source/package-lock.json
+
+      - name: Install dependencies
+        working-directory: source
+        shell: pwsh
+        run: npm ci
+
+      - name: Build fresh bundle
+        working-directory: source
+        shell: pwsh
+        run: |
+          if (Test-Path dist) { Remove-Item dist -Recurse -Force }
+          npm run build:bundle
+          if (-not (Test-Path dist/bundle.mjs)) {
+            Write-Error "dist/bundle.mjs missing after build:bundle"
+            exit 1
+          }
+
+      - name: Prepare Windows runtime package
+        working-directory: source
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist/windows-runtime | Out-Null
+          Copy-Item (Get-Command node).Source dist/windows-runtime/node.exe
+          Copy-Item dist/bundle.mjs dist/windows-runtime/bundle.mjs
+          @'
+          @echo off
+          set SCRIPT_DIR=%~dp0
+          set DEV=false
+          "%SCRIPT_DIR%node.exe" "%SCRIPT_DIR%bundle.mjs" %*
+          '@ | Set-Content -Path dist/windows-runtime/flicksy.cmd -Encoding ASCII
+
+      - name: Build Windows ZIP
+        working-directory: source
+        shell: pwsh
+        run: |
+          $zipDir = "dist/flicksy-windows-x64"
+          New-Item -ItemType Directory -Force -Path $zipDir | Out-Null
+          Copy-Item dist/windows-runtime/node.exe "$zipDir/node.exe"
+          Copy-Item dist/windows-runtime/bundle.mjs "$zipDir/bundle.mjs"
+          Copy-Item dist/windows-runtime/flicksy.cmd "$zipDir/flicksy.cmd"
+          Compress-Archive -Path "$zipDir/*" -DestinationPath "dist/flicksy-cli-$env:RELEASE_VERSION-windows-x64.zip" -Force
+
+      - name: Write NSIS installer script
+        working-directory: source
+        shell: pwsh
+        run: |
+          $version = "$env:RELEASE_VERSION"
+          $nsis = @"
+          !define APPNAME "Flicksy"
+          !define VERSION "$version"
+          !define PUBLISHER "reaperox"
+          !define INSTALL_DIR "`$PROGRAMFILES64\flicksy-cli"
+
+          Name "`${APPNAME} `${VERSION}"
+          OutFile "dist\flicksy-cli-`${VERSION}-setup.exe"
+          InstallDir "`${INSTALL_DIR}"
+          RequestExecutionLevel admin
+          SetCompressor lzma
+
+          Page directory
+          Page instfiles
+
+          Section "Install"
+            SetOutPath "`$INSTDIR"
+            File "dist\windows-runtime\node.exe"
+            File "dist\windows-runtime\bundle.mjs"
+            File "dist\windows-runtime\flicksy.cmd"
+
+            WriteUninstaller "`$INSTDIR\uninstall.exe"
+            EnVar::AddValue "PATH" "`$INSTDIR"
+
+            WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\`${APPNAME}" "DisplayName" "`${APPNAME}"
+            WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\`${APPNAME}" "UninstallString" "`$INSTDIR\uninstall.exe"
+            WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\`${APPNAME}" "Publisher" "`${PUBLISHER}"
+            WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\`${APPNAME}" "DisplayVersion" "`${VERSION}"
+          SectionEnd
+
+          Section "Uninstall"
+            Delete "`$INSTDIR\node.exe"
+            Delete "`$INSTDIR\bundle.mjs"
+            Delete "`$INSTDIR\flicksy.cmd"
+            Delete "`$INSTDIR\uninstall.exe"
+            RMDir "`$INSTDIR"
+            EnVar::DeleteValue "PATH" "`$INSTDIR"
+            DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\`${APPNAME}"
+          SectionEnd
+          "@
+          Set-Content -Path "installer.nsi" -Value $nsis -Encoding ASCII
+
+      - name: Install NSIS + EnVar plugin
+        shell: pwsh
+        run: |
+          choco install nsis --yes --no-progress
+          Invoke-WebRequest -Uri "https://nsis.sourceforge.io/mediawiki/images/7/7f/EnVar_plugin.zip" -OutFile envar.zip
+          Expand-Archive envar.zip -DestinationPath envar
+          Copy-Item -Path "envar\Plugins\x86-unicode\EnVar.dll" -Destination "C:\Program Files (x86)\NSIS\Plugins\x86-unicode\" -Force
+
+      - name: Compile NSIS installer
+        working-directory: source
+        shell: pwsh
+        run: |
+          & "C:\Program Files (x86)\NSIS\makensis.exe" installer.nsi
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v5
+        with:
+          name: windows-${{ needs.resolve.outputs.tag }}
+          if-no-files-found: error
+          path: |
+            source/dist/*windows-x64.zip
+            source/dist/flicksy-cli-*-setup.exe
+
+  build-macos:
+    name: Build macOS
+    needs: resolve
+    runs-on: macos-14
+    env:
+      RELEASE_TAG: ${{ needs.resolve.outputs.tag }}
+      RELEASE_VERSION: ${{ needs.resolve.outputs.version }}
+      SOURCE_REF: ${{ needs.resolve.outputs.source_ref }}
+      DELIVERY_FETCH_URL: ${{ secrets.DELIVERY_FETCH_URL }}
+    steps:
+      - name: Validate clone secret
+        shell: bash
+        run: |
+          if [ -z "${DELIVERY_FETCH_URL:-}" ]; then
+            echo "DELIVERY_FETCH_URL is required."
+            exit 1
+          fi
+          echo "::add-mask::${DELIVERY_FETCH_URL}"
+
+      - name: Start SSH agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DELIVERY_FETCH_SSH_KEY }}
+
+      - name: Clone source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          ssh-keyscan github.com >> ~/.ssh/known_hosts
+          GIT_SSH_COMMAND='ssh -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes' \
+            git clone --quiet --depth 1 --branch "$SOURCE_REF" "$DELIVERY_FETCH_URL" source
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: source/package-lock.json
+
+      - name: Install dependencies
+        shell: bash
+        working-directory: source
+        run: npm ci
+
+      - name: Build fresh bundle
+        shell: bash
+        working-directory: source
+        run: |
+          set -euo pipefail
+          rm -rf dist
+          npm run build:bundle
+          test -f dist/bundle.mjs
+
+      - name: Free disk space before macOS packaging
+        shell: bash
+        working-directory: source
+        run: |
+          set -euo pipefail
+          rm -rf node_modules
+          rm -rf "$HOME/.npm"
+          df -h
+
+      - name: Prepare macOS runtime package
+        shell: bash
+        working-directory: source
+        run: |
+          set -euo pipefail
+          mkdir -p dist/macos-runtime
+          cp "$(command -v node)" dist/macos-runtime/node
+          chmod +x dist/macos-runtime/node
+          cp dist/bundle.mjs dist/macos-runtime/bundle.mjs
+          cat > dist/macos-runtime/flicksy << 'WRAP'
+          #!/bin/sh
+          SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+          exec env DEV=false "$SCRIPT_DIR/node" "$SCRIPT_DIR/bundle.mjs" "$@"
+          WRAP
+          chmod +x dist/macos-runtime/flicksy
+
+      - name: Create DMG
+        shell: bash
+        working-directory: source
+        run: |
+          set -euo pipefail
+          VERSION="${RELEASE_VERSION}"
+          STAGE="dist/dmg-stage"
+          rm -rf "$STAGE"
+          mkdir -p "$STAGE"
+          cp dist/macos-runtime/node "$STAGE/node"
+          cp dist/macos-runtime/bundle.mjs "$STAGE/bundle.mjs"
+          cp dist/macos-runtime/flicksy "$STAGE/flicksy"
+          chmod +x "$STAGE/flicksy"
+          cat > "$STAGE/install.sh" << 'WRAP'
+          #!/bin/sh
+          set -e
+          sudo mkdir -p /usr/local/lib/flicksy
+          sudo cp "$(dirname "$0")/node" /usr/local/lib/flicksy/node
+          sudo cp "$(dirname "$0")/bundle.mjs" /usr/local/lib/flicksy/bundle.mjs
+          sudo sh -c 'cat > /usr/local/bin/flicksy << "EOF"
+          #!/bin/sh
+          exec env DEV=false /usr/local/lib/flicksy/node /usr/local/lib/flicksy/bundle.mjs "$@"
+          EOF'
+          sudo chmod +x /usr/local/bin/flicksy
+          echo "Installed: /usr/local/bin/flicksy"
+          WRAP
+          chmod +x "$STAGE/install.sh"
+          hdiutil create \
+            -volname "Flicksy $VERSION" \
+            -srcfolder "$STAGE" \
+            -fs APFS \
+            -size 1g \
+            -ov -format UDZO \
+            "dist/flicksy-cli-${VERSION}-macos-arm64.dmg"
+
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v5
+        with:
+          name: macos-${{ needs.resolve.outputs.tag }}
+          if-no-files-found: error
+          path: source/dist/flicksy-cli-*-macos-arm64.dmg
+
+  publish:
+    name: Publish release and manifest
+    needs: [resolve, build-linux, build-windows, build-macos]
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v5
+        with:
+          path: out
+
+      - name: Flatten artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+          find out -type f -maxdepth 3 -print0 | while IFS= read -r -d '' file; do
+            cp "$file" release-assets/"$(basename "$file")"
+          done
+          ls -la release-assets
+
+      - name: Prepare release notes
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s' '${{ needs.resolve.outputs.notes_b64 }}' | base64 -d > release-notes.md
+
+      - name: Create or update public release
+        env:
+          TAG: ${{ needs.resolve.outputs.tag }}
+          TITLE: ${{ needs.resolve.outputs.title }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            gh release upload "$TAG" release-assets/* --repo "${{ github.repository }}" --clobber
+            gh release edit "$TAG" --repo "${{ github.repository }}" --title "$TITLE" --notes-file release-notes.md
+          else
+            gh release create "$TAG" release-assets/* \
+              --repo "${{ github.repository }}" \
+              --title "$TITLE" \
+              --notes-file release-notes.md
+          fi
+
+      - name: Build manifest entry
+        shell: bash
+        env:
+          TAG: ${{ needs.resolve.outputs.tag }}
+          VERSION: ${{ needs.resolve.outputs.version }}
+        run: |
+          set -euo pipefail
+          published_at="$(gh release view "$TAG" --repo "${{ github.repository }}" --json publishedAt --jq '.publishedAt')"
+
+          detect_platform() {
+            local file="$1"
+            if [[ "$file" == *"windows-x64.zip" || "$file" == *.exe ]]; then echo "windows"; return; fi
+            if [[ "$file" == *"linux-x64.tar.gz" || "$file" == *.deb || "$file" == *.rpm ]]; then echo "linux"; return; fi
+            if [[ "$file" == *"macos-arm64.dmg" ]]; then echo "macos"; return; fi
+            echo "unknown"
+          }
+
+          detect_arch() {
+            local file="$1"
+            if [[ "$file" == *"arm64"* ]]; then echo "arm64"; return; fi
+            if [[ "$file" == *"x64"* || "$file" == *"amd64"* || "$file" == *"x86_64"* ]]; then echo "x64"; return; fi
+            echo "unknown"
+          }
+
+          detect_format() {
+            local file="$1"
+            if [[ "$file" == *.tar.gz ]]; then echo "tar.gz"; return; fi
+            if [[ "$file" == *.deb ]]; then echo "deb"; return; fi
+            if [[ "$file" == *.rpm ]]; then echo "rpm"; return; fi
+            if [[ "$file" == *.zip ]]; then echo "zip"; return; fi
+            if [[ "$file" == *.dmg ]]; then echo "dmg"; return; fi
+            if [[ "$file" == *.exe ]]; then echo "exe"; return; fi
+            echo "bin"
+          }
+
+          assets_json="[]"
+          for path in release-assets/*; do
+            [ -f "$path" ] || continue
+            file="$(basename "$path")"
+            sha256="$(sha256sum "$path" | awk '{print $1}')"
+            size="$(wc -c < "$path" | tr -d ' ')"
+            url="https://github.com/${{ github.repository }}/releases/download/$TAG/$file"
+            platform="$(detect_platform "$file")"
+            arch="$(detect_arch "$file")"
+            format="$(detect_format "$file")"
+            item="$(jq -n \
+              --arg name "$file" \
+              --arg url "$url" \
+              --arg platform "$platform" \
+              --arg arch "$arch" \
+              --arg format "$format" \
+              --arg sha256 "$sha256" \
+              --argjson size "$size" \
+              '{name:$name,url:$url,platform:$platform,arch:$arch,format:$format,sha256:$sha256,size:$size}')"
+            assets_json="$(jq -c --argjson item "$item" '. + [$item]' <<<"$assets_json")"
+          done
+
+          jq -n \
+            --arg product "Flicksy CLI" \
+            --arg channel "stable" \
+            --arg tag "$TAG" \
+            --arg version "$VERSION" \
+            --arg publishedAt "$published_at" \
+            --arg releaseUrl "https://github.com/${{ github.repository }}/releases/tag/$TAG" \
+            --argjson assets "$assets_json" \
+            '{product:$product,channel:$channel,tag:$tag,version:$version,publishedAt:$publishedAt,releaseUrl:$releaseUrl,assets:$assets}' > new-release.json
+
+      - name: Update manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if [ ! -f manifest.json ]; then
+            echo '{"product":"Flicksy CLI","channel":"stable","latest":null,"releases":[]}' > manifest.json
+          fi
+          jq --argjson next "$(cat new-release.json)" '
+            .product = "Flicksy CLI" |
+            .channel = "stable" |
+            .releases = ([ $next ] + (.releases // []) | unique_by(.tag) | sort_by(.publishedAt) | reverse | .[:20]) |
+            .latest = (.releases[0].tag // null)
+          ' manifest.json > manifest.next.json
+          mv manifest.next.json manifest.json
+          if git diff --quiet manifest.json; then
+            echo "Manifest unchanged."
+            exit 0
+          fi
+          git add manifest.json
+          git commit -m "chore: publish stable ${{ needs.resolve.outputs.tag }}"
+          git push
