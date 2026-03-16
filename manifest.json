@@ -8,7 +8,7 @@
       "channel": "stable",
       "tag": "v1.3.3",
       "version": "1.3.3",
-      "publishedAt": "2026-03-13T00:11:37Z",
+      "publishedAt": "2026-03-13T00:14:23Z",
       "releaseUrl": "https://github.com/freak-head/flicksy-cli-client/releases/tag/v1.3.3",
       "assets": [
         {
@@ -17,8 +17,8 @@
           "platform": "linux",
           "arch": "x64",
           "format": "tar.gz",
-          "sha256": "944a2447822ce17d7cd46755e05cb23b1c3202fb11912d7f013a3f28b2929854",
-          "size": 44592392
+          "sha256": "5d59982fd99a59a9abcc65ccb68ab3c3692272e08ff6658525c1de4192e503c3",
+          "size": 44146533
         },
         {
           "name": "flicksy-cli-1.3.3-macos-arm64.dmg",
@@ -26,8 +26,8 @@
           "platform": "macos",
           "arch": "arm64",
           "format": "dmg",
-          "sha256": "bdaab78d8ddc1afaa40d76b47bdcbbc0577dfdbc9dd374ae474f282ccc16c735",
-          "size": 42797618
+          "sha256": "740ec56fc2e1f0b7eb30d746a705c68b8edbd07aaf5bd45d001053423b3b1c2d",
+          "size": 42797852
         },
         {
           "name": "flicksy-cli-1.3.3-setup.exe",
@@ -35,7 +35,7 @@
           "platform": "windows",
           "arch": "unknown",
           "format": "exe",
-          "sha256": "459b2b44abd6a77079d9a42d5d82268b4e5640d86e9c790322e7d146c848ed22",
+          "sha256": "2c49872ac47bdbe192eca2083db5b1a1744ff496298bb8e603c77d74f76bdba7",
           "size": 22639535
         },
         {
@@ -44,7 +44,7 @@
           "platform": "windows",
           "arch": "x64",
           "format": "zip",
-          "sha256": "007448a82ed28448fc7bdf766faf343f99303b657c4cbe4210132a90cd3bb75a",
+          "sha256": "5dcbbb72709575533359d54b5ef22ffad1d13201bce11d6283547a18579ff1a4",
           "size": 33508716
         },
         {
@@ -53,8 +53,8 @@
           "platform": "linux",
           "arch": "x64",
           "format": "rpm",
-          "sha256": "5fc1db4f3dc4e29ced73a128018260a2e5b1b6517ad78e31f324e8e4238b403d",
-          "size": 44253113
+          "sha256": "e189de8ee67479942c0fb496c6d1b574c9e664d7ac02bc0cc2911507cd263c3d",
+          "size": 43810498
         },
         {
           "name": "flicksy-cli_1.3.3_amd64.deb",
@@ -62,8 +62,8 @@
           "platform": "linux",
           "arch": "x64",
           "format": "deb",
-          "sha256": "16c3eebbd6d6e53b0f2e74521eb872698356d8a89b44431b29464542e6e199b4",
-          "size": 44298360
+          "sha256": "b91c8a856cf3f033863fb0d55910381ce21aed53972da937d91db93ba7510cfd",
+          "size": 43856346
         }
       ]
     },
