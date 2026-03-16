@@ -456,7 +456,6 @@ jobs:
         working-directory: source
         run: |
           set -euo pipefail
-          rm -rf node_modules
           rm -rf "$HOME/.npm"
           df -h
 
