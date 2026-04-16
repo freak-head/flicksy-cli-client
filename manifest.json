@@ -17,8 +17,8 @@
           "platform": "linux",
           "arch": "x64",
           "format": "tar.gz",
-          "sha256": "8dc07fbb42d89a833b1d4006cc577b193c37785b29a27f3b999759970b5f76a5",
-          "size": 44952377
+          "sha256": "6c4553c2e29e769bfb0e629ee1f1e2e7e6b7e5152431bb0b8864a657c34b43b6",
+          "size": 44952124
         },
         {
           "name": "flicksy-cli-1.5.8-macos-arm64.dmg",
@@ -26,8 +26,8 @@
           "platform": "macos",
           "arch": "arm64",
           "format": "dmg",
-          "sha256": "156818617faf96bd0b3fffdf52400f98cd2f636cd40c2621e640f3e766c65215",
-          "size": 43622339
+          "sha256": "d7003eefd847a0076ab18881668859ec2d3f727d1b784db871ce66679f16d438",
+          "size": 43622457
         },
         {
           "name": "flicksy-cli-1.5.8-setup.exe",
@@ -35,8 +35,8 @@
           "platform": "windows",
           "arch": "unknown",
           "format": "exe",
-          "sha256": "59bd07fbc06b310eb2a0d22bd32d421a429a380f5fc1ddce5667cbedd2b8b851",
-          "size": 23159094
+          "sha256": "f59cde1964d521291724ec7fc127561cec63254f26254d5b9c1b9d6fdca496cb",
+          "size": 23159090
         },
         {
           "name": "flicksy-cli-1.5.8-windows-x64.zip",
@@ -44,7 +44,7 @@
           "platform": "windows",
           "arch": "x64",
           "format": "zip",
-          "sha256": "c034e756d983db0bd8c914bd9515c1fe08cf6607b8128bea62b697b70982dadc",
+          "sha256": "51825f972329ff755c047581fc4ce4ecb2b910d1b649d30447c68ad25baea421",
           "size": 34281800
         },
         {
@@ -53,8 +53,8 @@
           "platform": "linux",
           "arch": "x64",
           "format": "rpm",
-          "sha256": "f3d4718ffc32c5a231b56cf748111734133d4473c1459873e8213dadcdd6652c",
-          "size": 44617459
+          "sha256": "ba36136a8138ed1baa3f77843b399e20bb3eefbf022038412412edbc879ac369",
+          "size": 44617465
         },
         {
           "name": "flicksy-cli_1.5.8_amd64.deb",
@@ -62,8 +62,8 @@
           "platform": "linux",
           "arch": "x64",
           "format": "deb",
-          "sha256": "53d7196ce09c5af8dd99a4cd14ccfde88ac57ea7de05332d4321f46aa2fcd1dd",
-          "size": 44658498
+          "sha256": "5a206cc09d1f4a1b01f7c61cb9fb1d86225236d9034186804ab6b0cd098e32a5",
+          "size": 44658526
         }
       ]
     },
