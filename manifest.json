@@ -209,8 +209,8 @@
           "platform": "linux",
           "arch": "x64",
           "format": "tar.gz",
-          "sha256": "d8d735e19821c8a8986ccc786867c4f9b937c4c0a1fe726ff8c2ef211264e448",
-          "size": 44956249
+          "sha256": "fb499d0ff211fe880fbe422db17f5a8bac124a0fb3e63c4e60b74695570abf56",
+          "size": 44953021
         },
         {
           "name": "flicksy-cli-1.5.5-macos-arm64.dmg",
@@ -218,8 +218,8 @@
           "platform": "macos",
           "arch": "arm64",
           "format": "dmg",
-          "sha256": "b2000a00e4ced01c8e93c1ad2a3d0a2993c6355d9a2e9d18de773432fb7d85e3",
-          "size": 43622255
+          "sha256": "c40bf74e97fd224833248e0db0cfd7993c7227c8a11824cda1d6d6c963bfd3fe",
+          "size": 43621999
         },
         {
           "name": "flicksy-cli-1.5.5-setup.exe",
@@ -227,8 +227,8 @@
           "platform": "windows",
           "arch": "unknown",
           "format": "exe",
-          "sha256": "e15c4aafb6f03ab6d7ff1fb3dd918f226dd7cab44ba69645b59a3f7ccb716536",
-          "size": 23158394
+          "sha256": "952a9bdd2c3520f51e8c29e5e213f06c11843dbd356105cdb0dc8c52e214a092",
+          "size": 23158987
         },
         {
           "name": "flicksy-cli-1.5.5-windows-x64.zip",
@@ -236,8 +236,8 @@
           "platform": "windows",
           "arch": "x64",
           "format": "zip",
-          "sha256": "940c4ebc602bfd539f4d7dd8ad35573ae72b1ef75fd89d330e0bcaf2c1f65426",
-          "size": 34281029
+          "sha256": "f3ed51b2dd3377e47205963fbd191d20d767eb52163bb491851d990a2e049079",
+          "size": 34281625
         },
         {
           "name": "flicksy-cli-1.5.5.x86_64.rpm",
@@ -245,8 +245,8 @@
           "platform": "linux",
           "arch": "x64",
           "format": "rpm",
-          "sha256": "e15891642304204166882e3b2dcb4c6ce9a4bad338e830acc9c9482cb28a55a5",
-          "size": 44617870
+          "sha256": "a9e232eded3654f61b298aaa4688c2916adcdbb7a675fe5aa3e1b886cb3f7ed3",
+          "size": 44617413
         },
         {
           "name": "flicksy-cli_1.5.5_amd64.deb",
@@ -254,8 +254,8 @@
           "platform": "linux",
           "arch": "x64",
           "format": "deb",
-          "sha256": "343a75ac3cfaf7136ed3e7b5ab55a0d9e626cd9066093e624985351e7998a86b",
-          "size": 44665240
+          "sha256": "c3cdcd202fc367a04f8a33b6b07067835be997a9225761838047f4a8af2a8c7e",
+          "size": 44658938
         }
       ]
     },
