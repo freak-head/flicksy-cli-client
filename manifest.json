@@ -1,8 +1,72 @@
 {
   "product": "Flicksy CLI",
   "channel": "stable",
-  "latest": "v1.5.9",
+  "latest": "v1.5.10",
   "releases": [
+    {
+      "product": "Flicksy CLI",
+      "channel": "stable",
+      "tag": "v1.5.10",
+      "version": "1.5.10",
+      "publishedAt": "2026-04-17T19:37:55Z",
+      "releaseUrl": "https://github.com/freak-head/flicksy-cli-client/releases/tag/v1.5.10",
+      "assets": [
+        {
+          "name": "flicksy-cli-1.5.10-linux-x64.tar.gz",
+          "url": "https://github.com/freak-head/flicksy-cli-client/releases/download/v1.5.10/flicksy-cli-1.5.10-linux-x64.tar.gz",
+          "platform": "linux",
+          "arch": "x64",
+          "format": "tar.gz",
+          "sha256": "cb1696d3c5ceaabf2586697594e01d57db6987450638a07840d85d8926399423",
+          "size": 44952467
+        },
+        {
+          "name": "flicksy-cli-1.5.10-macos-arm64.dmg",
+          "url": "https://github.com/freak-head/flicksy-cli-client/releases/download/v1.5.10/flicksy-cli-1.5.10-macos-arm64.dmg",
+          "platform": "macos",
+          "arch": "arm64",
+          "format": "dmg",
+          "sha256": "09067223a789ade570d07e4b7c0a55170d19ee1ab52845a4cb8781c208155624",
+          "size": 43622300
+        },
+        {
+          "name": "flicksy-cli-1.5.10-setup.exe",
+          "url": "https://github.com/freak-head/flicksy-cli-client/releases/download/v1.5.10/flicksy-cli-1.5.10-setup.exe",
+          "platform": "windows",
+          "arch": "unknown",
+          "format": "exe",
+          "sha256": "42772c202bca723ea479578366e90c8b09d53c4425c6b14f47b152096d525505",
+          "size": 23159395
+        },
+        {
+          "name": "flicksy-cli-1.5.10-windows-x64.zip",
+          "url": "https://github.com/freak-head/flicksy-cli-client/releases/download/v1.5.10/flicksy-cli-1.5.10-windows-x64.zip",
+          "platform": "windows",
+          "arch": "x64",
+          "format": "zip",
+          "sha256": "7820d0a7277319052612142ecf33d39492235ea9a22cb8ada94c65d56316af4d",
+          "size": 34281989
+        },
+        {
+          "name": "flicksy-cli-1.5.10.x86_64.rpm",
+          "url": "https://github.com/freak-head/flicksy-cli-client/releases/download/v1.5.10/flicksy-cli-1.5.10.x86_64.rpm",
+          "platform": "linux",
+          "arch": "x64",
+          "format": "rpm",
+          "sha256": "fb3a0a7306fc04f8a108786d5e2763d3f93473b7587cfe2f2789ea9882a8152f",
+          "size": 44617387
+        },
+        {
+          "name": "flicksy-cli_1.5.10_amd64.deb",
+          "url": "https://github.com/freak-head/flicksy-cli-client/releases/download/v1.5.10/flicksy-cli_1.5.10_amd64.deb",
+          "platform": "linux",
+          "arch": "x64",
+          "format": "deb",
+          "sha256": "648b411b2d44bcfb92f68ab001ffec54d6d880c8b27bee9f22e261d90f672327",
+          "size": 44664992
+        }
+      ]
+    },
     {
       "product": "Flicksy CLI",
       "channel": "stable",
